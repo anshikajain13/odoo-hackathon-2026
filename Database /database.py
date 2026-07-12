@@ -232,6 +232,52 @@ def log_maintenance(vehicle_id, description, cost, entry_date, status='Open'):
     finally:
         conn.close()
 
+def get_fleet_summary():
+    """Fetches total active vehicles, total drivers, and ongoing trips for the dashboard."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # 1. Active vehicles summary
+        cursor.execute("SELECT COUNT(*) FROM vehicles WHERE status != 'Retired'")
+        total_vehicles = cursor.fetchone()[0]
+        
+        # 2. Total active drivers
+        cursor.execute("SELECT COUNT(*) FROM drivers WHERE status != 'Suspended'")
+        total_drivers = cursor.fetchone()[0]
+        
+        # 3. Live trips running
+        cursor.execute("SELECT COUNT(*) FROM trips WHERE status = 'Dispatched'")
+        live_trips = cursor.fetchone()[0]
+        
+        return {
+            "total_vehicles": total_vehicles,
+            "total_drivers": total_drivers,
+            "live_trips": live_trips
+        }
+    except Exception as e:
+        print(f"[ANALYTICS ERROR] Fleet summary failed: {e}")
+        return {}
+    finally:
+        conn.close()
+
+def get_total_expenses():
+    """Calculates total dynamic expense breakdown across the system."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT type, SUM(amount) FROM expenses GROUP BY type")
+        rows = cursor.fetchall()
+        
+        # Formatting breakdown as a clean dictionary
+        breakdown = {row[0]: row[1] for row in rows}
+        return breakdown
+    except Exception as e:
+        print(f"[ANALYTICS ERROR] Expense query failed: {e}")
+        return {}
+    finally:
+        conn.close()
+
 if __name__ == '__main__':
     init_db()
     print("Database system initialized successfully.")
