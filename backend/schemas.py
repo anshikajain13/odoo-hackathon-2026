@@ -17,3 +17,21 @@ class VehicleUpdate(BaseModel):
     odometer: float
     acquisition_cost: float
     status: str
+from datetime import date
+
+
+class DriverCreate(BaseModel):
+    name: str
+    license_number: str
+    license_category: str
+    license_expiry_date: date
+    contact_number: str
+    safety_score: float = 100
+class DriverUpdate(BaseModel):
+    name: str
+    license_number: str
+    license_category: str
+    license_expiry_date: date
+    contact_number: str
+    safety_score: float
+    status: str
