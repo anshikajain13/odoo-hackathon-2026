@@ -94,3 +94,47 @@ class Driver(Base):
         String,
         default="Available"
     )
+class Trip(Base):
+
+    __tablename__ = "trips"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    vehicle_id = Column(
+        Integer,
+        nullable=False
+    )
+
+    driver_id = Column(
+        Integer,
+        nullable=False
+    )
+
+    origin = Column(
+        String,
+        nullable=False
+    )
+
+    destination = Column(
+        String,
+        nullable=False
+    )
+
+    cargo_weight = Column(
+        Float,
+        nullable=False
+    )
+
+    trip_date = Column(
+        Date,
+        nullable=False
+    )
+
+    status = Column(
+        String,
+        default="Draft"
+    )

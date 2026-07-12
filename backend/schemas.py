@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from datetime import date
 
 
 class VehicleCreate(BaseModel):
@@ -34,4 +35,21 @@ class DriverUpdate(BaseModel):
     license_expiry_date: date
     contact_number: str
     safety_score: float
+    status: str
+class TripCreate(BaseModel):
+    vehicle_id: int
+    driver_id: int
+    origin: str
+    destination: str
+    cargo_weight: float
+    trip_date: date
+
+
+class TripUpdate(BaseModel):
+    vehicle_id: int
+    driver_id: int
+    origin: str
+    destination: str
+    cargo_weight: float
+    trip_date: date
     status: str
