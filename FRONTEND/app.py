@@ -1,0 +1,1139 @@
+import streamlit as st
+import pandas as pd
+import requests
+from datetime import datetime
+
+API_BASE_URL = "http://127.0.0.1:8000"
+
+
+def get_dashboard_data():
+    try:
+        response = requests.get(
+            f"{API_BASE_URL}/analytics/dashboard",
+            timeout=5
+        )
+
+        if response.status_code == 200:
+            return response.json()
+
+    except requests.exceptions.RequestException:
+        return None
+
+    return None
+
+# =============================================================================
+# PAGE CONFIG
+# =============================================================================
+
+st.set_page_config(
+    page_title="TransitOps | Fleet Management",
+    page_icon="🚦",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+
+# =============================================================================
+# CUSTOM CSS — dark, professional, dispatch-console styling
+# Native widget colors (buttons, radio, focus rings) come from
+# .streamlit/config.toml. This CSS layers on cards, badges, tables & spacing.
+# =============================================================================
+
+CUSTOM_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
+
+:root {
+    --bg: #0B1120;
+    --bg-secondary: #0F1729;
+    --surface: #131B2E;
+    --surface-hover: #1A2438;
+    --border: #232D42;
+    --text-primary: #E8ECF4;
+    --text-secondary: #8B95A8;
+    --text-muted: #5B6478;
+    --accent: #F5A623;
+    --accent-soft: rgba(245, 166, 35, 0.12);
+    --success: #22C55E;
+    --success-soft: rgba(34, 197, 94, 0.12);
+    --danger: #EF4444;
+    --danger-soft: rgba(239, 68, 68, 0.12);
+    --info: #2DD4BF;
+    --info-soft: rgba(45, 212, 191, 0.12);
+}
+
+html, body, [class*="css"] {
+    font-family: 'Inter', -apple-system, sans-serif;
+}
+
+.stApp {
+    background: radial-gradient(circle at top left, #0F1729 0%, #0B1120 55%);
+}
+
+/* Hide default Streamlit chrome clutter */
+#MainMenu, footer {visibility: hidden;}
+
+/* ---------- Sidebar ---------- */
+[data-testid="stSidebar"] {
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border);
+}
+[data-testid="stSidebar"] > div:first-child {
+    padding-top: 1.2rem;
+}
+.sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 0.6rem 1.1rem 0.6rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+.sidebar-brand .logo-badge {
+    width: 38px; height: 38px;
+    background: var(--accent-soft);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem;
+}
+.sidebar-brand .brand-text .title {
+    font-weight: 800; font-size: 1.05rem; color: var(--text-primary); line-height: 1.1;
+}
+.sidebar-brand .brand-text .subtitle {
+    font-size: 0.72rem; color: var(--text-secondary); letter-spacing: 0.04em; text-transform: uppercase;
+}
+[data-testid="stSidebar"] .stRadio > div {
+    display: flex; flex-direction: column; gap: 3px;
+}
+[data-testid="stSidebar"] .stRadio > div > label {
+    background: transparent;
+    border-radius: 10px;
+    padding: 9px 12px;
+    transition: background 0.15s ease;
+    border: 1px solid transparent;
+}
+[data-testid="stSidebar"] .stRadio > div > label:hover {
+    background: var(--surface-hover);
+    border-color: var(--border);
+}
+[data-testid="stSidebar"] .stRadio p {
+    font-size: 0.92rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+.sidebar-footer {
+    position: fixed;
+    bottom: 1.1rem;
+    padding: 0.6rem 0.9rem;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border);
+    width: 15.5rem;
+}
+
+/* ---------- Page header ---------- */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-bottom: 1rem;
+    margin-bottom: 1.4rem;
+    border-bottom: 1px solid var(--border);
+}
+.page-header .title {
+    font-size: 1.65rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin: 0;
+}
+.page-header .subtitle {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+.page-header .badge {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* ---------- Metric cards ---------- */
+.metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+    height: 100%;
+}
+.metric-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+}
+.metric-icon {
+    width: 42px; height: 42px;
+    min-width: 42px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.25rem;
+}
+.metric-label {
+    font-size: 0.76rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+}
+.metric-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.25;
+}
+.metric-sub {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 1px;
+}
+
+/* ---------- Section cards (forms, tables) ---------- */
+.section-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.3rem 1.4rem;
+    margin-bottom: 1.2rem;
+}
+.section-card h4 {
+    margin-top: 0;
+    color: var(--text-primary);
+    font-size: 1.02rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.section-card .desc {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    margin-bottom: 1rem;
+}
+
+/* Streamlit's own bordered container (st.container(border=True)) */
+[data-testid="stVerticalBlockBorderWrapper"] {
+    border-radius: 14px !important;
+}
+
+/* ---------- Forms & inputs ---------- */
+[data-testid="stForm"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.3rem 1.4rem 0.6rem 1.4rem;
+}
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input {
+    background: var(--bg-secondary) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text-primary) !important;
+    border-radius: 8px !important;
+}
+[data-baseweb="select"] > div {
+    background: var(--bg-secondary) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+}
+label {
+    color: var(--text-secondary) !important;
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+}
+
+/* ---------- Buttons ---------- */
+.stButton > button, [data-testid="stFormSubmitButton"] button {
+    border-radius: 9px !important;
+    font-weight: 600 !important;
+    padding: 0.5rem 1.3rem !important;
+    transition: transform 0.12s ease, box-shadow 0.12s ease !important;
+    border: none !important;
+}
+.stButton > button:hover, [data-testid="stFormSubmitButton"] button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(245, 166, 35, 0.25);
+}
+
+/* ---------- DataFrame / tables ---------- */
+[data-testid="stDataFrame"] {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+/* ---------- Alerts ---------- */
+[data-testid="stAlert"] {
+    border-radius: 10px;
+    border: 1px solid var(--border);
+}
+
+/* ---------- Activity feed ---------- */
+.activity-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--border);
+}
+.activity-row:last-child { border-bottom: none; }
+.activity-icon {
+    width: 30px; height: 30px; min-width: 30px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.95rem;
+    background: var(--surface-hover);
+}
+.activity-text { font-size: 0.86rem; color: var(--text-primary); }
+.activity-time { font-size: 0.72rem; color: var(--text-muted); }
+
+/* ---------- Divider spacing ---------- */
+hr { border-color: var(--border) !important; }
+</style>
+"""
+
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
+
+# =============================================================================
+# SESSION STATE — same shape/keys as original app, untouched
+# =============================================================================
+
+if "vehicles" not in st.session_state:
+    st.session_state.vehicles = pd.DataFrame({
+        "Vehicle Number": ["MP04AB1234", "MP09XY5678"],
+        "Type": ["Bus", "Truck"],
+        "Status": ["Active", "Maintenance"]
+    })
+
+if "drivers" not in st.session_state:
+    st.session_state.drivers = pd.DataFrame({
+        "Name": ["Rahul Sharma", "Priya Patel"],
+        "License": ["LIC123", "LIC456"],
+        "Phone": ["9876543210", "9876501234"]
+    })
+
+if "maintenance" not in st.session_state:
+    st.session_state.maintenance = pd.DataFrame(
+        columns=["Vehicle Number", "Issue", "Cost", "Status"]
+    )
+
+if "fuel" not in st.session_state:
+    st.session_state.fuel = pd.DataFrame(
+        columns=["Vehicle Number", "Fuel (Liters)", "Cost"]
+    )
+
+if "trips" not in st.session_state:
+    st.session_state.trips = pd.DataFrame(
+        columns=["Source", "Destination", "Vehicle", "Driver", "Status"]
+    )
+
+
+# =============================================================================
+# HELPER FUNCTIONS — small, beginner-friendly UI building blocks
+# =============================================================================
+
+def page_header(title, subtitle, badge_text=None):
+    """Renders a consistent header at the top of every page."""
+    badge_html = f'<div class="badge">{badge_text}</div>' if badge_text else ""
+    st.markdown(f"""
+        <div class="page-header">
+            <div>
+                <p class="title">{title}</p>
+                <p class="subtitle">{subtitle}</p>
+            </div>
+            {badge_html}
+        </div>
+    """, unsafe_allow_html=True)
+
+
+def metric_card(icon, label, value, sublabel="", accent="#F5A623"):
+    """Renders one premium metric card. Call inside a column."""
+    st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-icon" style="background:{accent}22; color:{accent};">{icon}</div>
+            <div>
+                <div class="metric-label">{label}</div>
+                <div class="metric-value">{value}</div>
+                <div class="metric-sub">{sublabel}</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+
+def section_title(icon, title, desc=""):
+    """Small heading used above forms/tables inside a card-like block."""
+    st.markdown(f"""
+        <h4 style="margin-bottom:2px;">{icon} {title}</h4>
+        <p style="color:var(--text-secondary); font-size:0.82rem; margin-top:0; margin-bottom:0.8rem;">{desc}</p>
+    """, unsafe_allow_html=True)
+
+
+STATUS_ICONS = {
+    "Active": "🟢", "Running": "🟢", "Closed": "🟢", "Completed": "🟢",
+    "Maintenance": "🟡", "Open": "🟡", "Pending": "🟡",
+    "Inactive": "⚪", "Cancelled": "🔴",
+}
+
+
+def decorate_status(df, column):
+    """Returns a display-only copy of df with an icon prefixed to the
+    status column, so the table reads at a glance. Original session_state
+    data is never modified."""
+    if df.empty or column not in df.columns:
+        return df
+    display_df = df.copy()
+    display_df[column] = display_df[column].apply(
+        lambda s: f"{STATUS_ICONS.get(s, '⚪')} {s}"
+    )
+    return display_df
+
+
+def empty_state(message):
+    st.markdown(f"""
+        <div style="text-align:center; padding: 2rem 1rem; color: var(--text-muted);
+                    border: 1px dashed var(--border); border-radius: 12px;">
+            {message}
+        </div>
+    """, unsafe_allow_html=True)
+
+
+# =============================================================================
+# SIDEBAR NAVIGATION
+# =============================================================================
+
+with st.sidebar:
+    st.markdown("""
+        <div class="sidebar-brand">
+            <div class="logo-badge">🚦</div>
+            <div class="brand-text">
+                <div class="title">TransitOps</div>
+                <div class="subtitle">Fleet Management</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    page = st.radio(
+        "Navigation",
+        [
+            "📊  Dashboard",
+            "🚌  Vehicles",
+            "👤  Drivers",
+            "🗺️  Trips",
+            "🔧  Maintenance",
+            "⛽  Fuel",
+        ],
+        label_visibility="collapsed"
+    )
+    # strip the icon back off so the rest of the logic stays unchanged
+    page = page.split("  ")[1]
+
+    st.markdown("""
+        <div class="sidebar-footer">
+            Built for Odoo Hackathon 2026<br>Frontend by the UI team
+        </div>
+    """, unsafe_allow_html=True)
+
+
+# =============================================================================
+# PAGE: DASHBOARD
+# =============================================================================
+
+if page == "Dashboard":
+
+    dashboard_data = get_dashboard_data()
+
+    if dashboard_data:
+        total_vehicles = dashboard_data["fleet"]["total"]
+        available_vehicles = dashboard_data["fleet"]["available"]
+        vehicles_on_trip = dashboard_data["fleet"]["on_trip"]
+        vehicles_in_maintenance = dashboard_data["fleet"]["maintenance"]
+
+        total_drivers = dashboard_data["drivers"]["total"]
+        available_drivers = dashboard_data["drivers"]["available"]
+
+        total_trips = dashboard_data["trips"]["total"]
+        active_trips = dashboard_data["trips"]["dispatched"]
+        completed_trips = dashboard_data["trips"]["completed"]
+
+    else:
+        total_vehicles = 0
+        available_vehicles = 0
+        vehicles_on_trip = 0
+        vehicles_in_maintenance = 0
+        total_drivers = 0
+        available_drivers = 0
+        total_trips = 0
+        active_trips = 0
+        completed_trips = 0
+
+    page_header(
+        "Transport Operations Dashboard",
+        "Live overview of your fleet, drivers and trips",
+        datetime.now().strftime("%d %b %Y")
+    )
+
+
+    fuel_cost = st.session_state.fuel["Cost"].sum() if not st.session_state.fuel.empty else 0
+    maintenance_cost = st.session_state.maintenance["Cost"].sum() if not st.session_state.maintenance.empty else 0
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1:
+        metric_card("🚌", "Total Vehicles", total_vehicles, accent="#F5A623")
+    with c2:
+        metric_card("👤", "Total Drivers", total_drivers, accent="#2DD4BF")
+    with c3:
+        metric_card("🗺️", "Active Trips", active_trips, accent="#22C55E")
+    with c4:
+        metric_card("🔧", "Maintenance Records", dashboard_data["maintenance"]["total"] if dashboard_data else 0, accent="#EF4444")
+    with c5:
+        metric_card("⛽", "Fuel Expense", f"₹{fuel_cost:,.0f}", accent="#F5A623")
+
+    st.write("")
+    left, right = st.columns([1.6, 1])
+
+    with left:
+        with st.container(border=True):
+            section_title("🗺️", "Recent Trips", "Latest journeys across your fleet")
+            if st.session_state.trips.empty:
+                empty_state("No trips recorded yet.")
+            else:
+                st.dataframe(
+                    decorate_status(st.session_state.trips, "Status"),
+                    use_container_width=True,
+                    hide_index=True
+                )
+            try:
+                trips_response = requests.get(
+                    f"{API_BASE_URL}/trips/",
+                    timeout=5
+                )
+
+                if trips_response.status_code == 200:
+                    trips_data = trips_response.json()
+                    trips = trips_data
+
+                    if not trips:
+                        empty_state("No trips recorded yet.")
+                    else:
+                        trips_df = pd.DataFrame(trips)
+
+                        st.dataframe(
+                            trips_df,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                else:
+                    empty_state("Unable to load trips.")
+
+            except requests.exceptions.RequestException:
+                empty_state("Backend connection failed.")
+              
+        with st.container(border=True):
+            section_title("💰", "Cost Analytics", "Fuel vs. maintenance spend")
+            cc1, cc2 = st.columns(2)
+            with cc1:
+                metric_card("⛽", "Fuel Cost", f"₹{fuel_cost:,.0f}", accent="#F5A623")
+            with cc2:
+                metric_card("🔧", "Maintenance Cost", f"₹{maintenance_cost:,.0f}", accent="#EF4444")
+
+    with right:
+        with st.container(border=True):
+            section_title("🕒", "Recent Activity", "Latest entries across modules")
+
+            activities = []
+            for _, row in st.session_state.trips.tail(3).iterrows():
+                activities.append(("🗺️", f"Trip created: {row['Source']} → {row['Destination']} "
+                                          f"({row['Vehicle']}, {row['Driver']})"))
+            for _, row in st.session_state.maintenance.tail(2).iterrows():
+                activities.append(("🔧", f"Maintenance logged for {row['Vehicle Number']}: {row['Issue']}"))
+            for _, row in st.session_state.fuel.tail(2).iterrows():
+                activities.append(("⛽", f"Fuel refill for {row['Vehicle Number']}: "
+                                          f"{row['Fuel (Liters)']} L (₹{row['Cost']})"))
+
+            if not activities:
+                empty_state("No activity yet — add a vehicle, driver or trip to get started.")
+            else:
+                rows_html = ""
+                for icon, text in activities[-6:][::-1]:
+                    rows_html += f"""
+                        <div class="activity-row">
+                            <div class="activity-icon">{icon}</div>
+                            <div class="activity-text">{text}</div>
+                        </div>
+                    """
+                st.markdown(rows_html, unsafe_allow_html=True)
+
+
+# =============================================================================
+# PAGE: VEHICLES
+# =============================================================================
+
+elif page == "Vehicles":
+
+    page_header("Vehicle Management", "Add and track vehicles in your fleet")
+
+    with st.form("add_vehicle_form", clear_on_submit=True):
+        section_title("➕", "Add Vehicle", "Register a new vehicle to the fleet")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            vehicle_no = st.text_input("Vehicle Number", placeholder="e.g. MP04AB1234")
+        with col2:
+            vehicle_type = st.selectbox("Vehicle Type", ["Bus", "Truck", "Van"])
+        with col3:
+            vehicle_status = st.selectbox("Status", ["Active", "Maintenance", "Inactive"])
+
+        submitted = st.form_submit_button("Add Vehicle", use_container_width=True)
+
+        if submitted:
+            if vehicle_no.strip() == "":
+                st.warning("Enter vehicle number")
+            else:
+                vehicle_data = {
+                    "vehicle_name": vehicle_no,
+                    "registration_number": vehicle_no,
+                    "vehicle_type": vehicle_type,
+                    "max_load_capacity": 500,
+                    "odometer": 0,
+                    "acquisition_cost": 0,
+                    "status": "Available"
+                }
+
+                try:
+                    response = requests.post(
+                        f"{API_BASE_URL}/vehicles/",
+                        json=vehicle_data,
+                        timeout=5
+                    )
+
+                    if response.status_code == 200:
+                        st.success("Vehicle added successfully")
+                        st.rerun()
+                    else:
+                        st.error(response.json().get("detail", "Failed to add vehicle"))
+
+                except requests.exceptions.RequestException:
+                    st.error("Backend connection failed")
+
+    st.write("")
+
+    with st.container(border=True):
+        try:
+            response = requests.get(
+                f"{API_BASE_URL}/vehicles/",
+                timeout=5
+            )
+
+            if response.status_code == 200:
+                vehicles_data = response.json()
+                vehicles = vehicles_data.get("vehicles", [])
+
+                vehicles_df = pd.DataFrame(vehicles)
+
+                section_title(
+                    "🚌",
+                    "Vehicle Records",
+                    f"{len(vehicles_df)} vehicles on record"
+                )
+
+                fcol1, fcol2 = st.columns([2, 1])
+
+                with fcol1:
+                    search_term = st.text_input(
+                        "Search by vehicle number",
+                        placeholder="Type to search..."
+                    )
+
+                with fcol2:
+                    status_filter = st.selectbox(
+                        "Filter by status",
+                        ["All", "Available", "On Trip", "Maintenance"]
+                    )
+
+                if not vehicles_df.empty:
+                    filtered = vehicles_df.copy()
+
+                    if search_term:
+                        filtered = filtered[
+                            filtered["registration_number"].str.contains(
+                                search_term,
+                                case=False,
+                                na=False
+                            )
+                        ]
+
+                    if status_filter != "All":
+                        filtered = filtered[
+                            filtered["status"] == status_filter
+                        ]
+
+                    if filtered.empty:
+                        empty_state("No vehicles match your search/filter.")
+                    else:
+                        st.dataframe(
+                            filtered,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                else:
+                    empty_state("No vehicles recorded yet.")
+
+            else:
+                st.error("Failed to load vehicles")
+
+        except requests.exceptions.RequestException:
+            st.error("Backend connection failed")
+
+
+# =============================================================================
+# PAGE: DRIVERS
+# =============================================================================
+
+elif page == "Drivers":
+
+    page_header("Driver Management", "Maintain your roster of drivers")
+
+    with st.form("add_driver_form", clear_on_submit=True):
+        section_title("➕", "Add Driver", "Register a new driver")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            driver_name = st.text_input("Driver Name", placeholder="e.g. Rahul Sharma")
+        with col2:
+            license_no = st.text_input("License Number", placeholder="e.g. LIC123")
+        with col3:
+            phone = st.text_input("Phone Number", placeholder="e.g. 9876543210")
+
+        submitted = st.form_submit_button("Add Driver", use_container_width=True)
+
+        if submitted:
+            if driver_name.strip() == "":
+                st.warning("Enter driver name")
+            elif license_no.strip() == "":
+                st.warning("Enter license number")
+            elif phone.strip() == "":
+                st.warning("Enter phone number")
+            else:
+                driver_data = {
+                    "name": driver_name,
+                    "license_number": license_no,
+                    "license_category": "LMV",
+                    "license_expiry_date": "2028-12-31",
+                    "contact_number": phone,
+                    "safety_score": 100,
+                    "status": "Available"
+                }
+
+                try:
+                    response = requests.post(
+                        f"{API_BASE_URL}/drivers/",
+                        json=driver_data,
+                        timeout=5
+                    )
+
+                    if response.status_code == 200:
+                        st.success("Driver added successfully")
+                        st.rerun()
+                    else:
+                        st.error(
+                            response.json().get(
+                                "detail",
+                                "Failed to add driver"
+                            )
+                        )
+
+                except requests.exceptions.RequestException:
+                    st.error("Backend connection failed")
+    st.write("")
+
+    try:
+        response = requests.get(
+            f"{API_BASE_URL}/drivers/",
+            timeout=5
+        )
+
+        if response.status_code == 200:
+            drivers_data = response.json()
+            drivers = drivers_data.get("drivers", [])
+
+            drivers_df = pd.DataFrame(drivers)
+
+            with st.container(border=True):
+                section_title(
+                    "👤",
+                    "Driver Records",
+                    f"{len(drivers)} drivers on record"
+                )
+
+                if drivers_df.empty:
+                    empty_state("No drivers added yet.")
+                else:
+                    st.dataframe(
+                        drivers_df,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+        else:
+            st.error("Failed to load drivers")
+
+    except requests.exceptions.RequestException:
+        st.error("Backend connection failed")
+
+
+# =============================================================================
+# PAGE: TRIPS
+# =============================================================================
+
+elif page == "Trips":
+
+    page_header(
+        "Trip Management",
+        "Plan and track trips across your fleet"
+    )
+
+    try:
+        vehicles_response = requests.get(
+            f"{API_BASE_URL}/vehicles/",
+            timeout=5
+        )
+
+        drivers_response = requests.get(
+            f"{API_BASE_URL}/drivers/",
+            timeout=5
+        )
+
+        if (
+            vehicles_response.status_code == 200
+            and drivers_response.status_code == 200
+        ):
+            vehicles_data = vehicles_response.json()
+            drivers_data = drivers_response.json()
+
+            vehicles = vehicles_data.get("vehicles", [])
+            drivers = drivers_data.get("drivers", [])
+
+            available_vehicles = [
+                vehicle
+                for vehicle in vehicles
+                if vehicle["status"] == "Available"
+            ]
+
+            available_drivers = [
+                driver
+                for driver in drivers
+                if driver["status"] == "Available"
+            ]
+
+        else:
+            available_vehicles = []
+            available_drivers = []
+
+    except requests.exceptions.RequestException:
+        available_vehicles = []
+        available_drivers = []
+        st.error("Backend connection failed")
+
+
+    vehicle_map = {
+        f'{vehicle["vehicle_name"]} - {vehicle["registration_number"]}':
+        vehicle["id"]
+        for vehicle in available_vehicles
+    }
+
+    driver_map = {
+        driver["name"]: driver["id"]
+        for driver in available_drivers
+    }
+
+
+    with st.container(border=True):
+
+        section_title(
+            "➕",
+            "Create Trip",
+            "Assign a vehicle and driver to a new trip"
+        )
+
+        if vehicle_map and driver_map:
+
+            with st.form(
+                "create_trip_form",
+                clear_on_submit=True
+            ):
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    source = st.text_input(
+                        "Source",
+                        placeholder="e.g. Bhopal"
+                    )
+
+                with col2:
+                    destination = st.text_input(
+                        "Destination",
+                        placeholder="e.g. Indore"
+                    )
+
+
+                col3, col4 = st.columns(2)
+
+                with col3:
+                    vehicle = st.selectbox(
+                        "Assign Vehicle",
+                        list(vehicle_map.keys())
+                    )
+
+                with col4:
+                    driver = st.selectbox(
+                        "Assign Driver",
+                        list(driver_map.keys())
+                    )
+
+
+                col5, col6 = st.columns(2)
+
+                with col5:
+                    cargo_weight = st.number_input(
+                        "Cargo Weight (kg)",
+                        min_value=1.0,
+                        value=100.0
+                    )
+
+                with col6:
+                    trip_date = st.date_input(
+                        "Trip Date"
+                    )
+
+
+                submitted = st.form_submit_button(
+                    "Create Trip",
+                    use_container_width=True
+                )
+
+
+                if submitted:
+
+                    if not source.strip() or not destination.strip():
+
+                        st.warning(
+                            "Enter source and destination"
+                        )
+
+                    else:
+
+                        trip_data = {
+                            "vehicle_id": vehicle_map[vehicle],
+                            "driver_id": driver_map[driver],
+                            "origin": source,
+                            "destination": destination,
+                            "cargo_weight": cargo_weight,
+                            "trip_date": str(trip_date)
+                        }
+
+                        try:
+
+                            response = requests.post(
+                                f"{API_BASE_URL}/trips/",
+                                json=trip_data,
+                                timeout=5
+                            )
+
+                            if response.status_code == 200:
+
+                                st.success(
+                                    "Trip created successfully"
+                                )
+
+                                st.rerun()
+
+                            else:
+
+                                st.error(
+                                    response.json().get(
+                                        "detail",
+                                        "Failed to create trip"
+                                    )
+                                )
+
+                        except requests.exceptions.RequestException:
+
+                            st.error(
+                                "Backend connection failed"
+                            )
+
+        else:
+
+            empty_state(
+                "Add an available vehicle and driver before creating a trip."
+            )
+
+
+    st.write("")
+
+
+    with st.container(border=True):
+
+        try:
+
+            trips_response = requests.get(
+                f"{API_BASE_URL}/trips/",
+                timeout=5
+            )
+
+            if trips_response.status_code == 200:
+
+                trips = trips_response.json()
+
+                section_title(
+                    "🗺️",
+                    "Trip History",
+                    f"{len(trips)} trips recorded"
+                )
+
+                if not trips:
+
+                    empty_state(
+                        "No trips recorded yet."
+                    )
+
+                else:
+
+                    trips_df = pd.DataFrame(trips)
+
+                    st.dataframe(
+                        trips_df,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+            else:
+
+                empty_state(
+                    "Unable to load trips."
+                )
+
+        except requests.exceptions.RequestException:
+
+            empty_state(
+                "Backend connection failed."
+            )
+
+
+# =============================================================================
+# PAGE: MAINTENANCE
+# =============================================================================
+
+elif page == "Maintenance":
+
+    page_header("Maintenance Management", "Log and monitor vehicle maintenance")
+
+    vehicle_list = st.session_state.vehicles["Vehicle Number"].tolist()
+
+    with st.container(border=True):
+        section_title("➕", "Add Maintenance Record", "Log an issue and its repair cost")
+
+        if vehicle_list:
+            with st.form("add_maintenance_form", clear_on_submit=True):
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    vehicle = st.selectbox("Select Vehicle", vehicle_list)
+                with col2:
+                    issue = st.text_input("Issue", placeholder="e.g. Brake pad replacement")
+                with col3:
+                    cost = st.number_input("Maintenance Cost (₹)", min_value=0)
+
+                submitted = st.form_submit_button("Add Maintenance Record", use_container_width=True)
+
+                if submitted:
+                    new_record = pd.DataFrame({
+                        "Vehicle Number": [vehicle],
+                        "Issue": [issue],
+                        "Cost": [cost],
+                        "Status": ["Open"]
+                    })
+                    st.session_state.maintenance = pd.concat(
+                        [st.session_state.maintenance, new_record], ignore_index=True
+                    )
+                    st.success("Maintenance record added")
+        else:
+            empty_state("Add a vehicle first before logging maintenance.")
+
+    st.write("")
+
+    with st.container(border=True):
+        section_title("🔧", "Maintenance Records", f"{len(st.session_state.maintenance)} records on file")
+        if st.session_state.maintenance.empty:
+            empty_state("No maintenance records yet.")
+        else:
+            st.dataframe(
+                decorate_status(st.session_state.maintenance, "Status"),
+                use_container_width=True,
+                hide_index=True
+            )
+
+
+# =============================================================================
+# PAGE: FUEL
+# =============================================================================
+
+elif page == "Fuel":
+
+    page_header("Fuel Management", "Track fuel usage and cost per vehicle")
+
+    vehicle_list = st.session_state.vehicles["Vehicle Number"].tolist()
+
+    with st.container(border=True):
+        section_title("➕", "Add Fuel Record", "Log a refill for a vehicle")
+
+        if vehicle_list:
+            with st.form("add_fuel_form", clear_on_submit=True):
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    vehicle = st.selectbox("Select Vehicle", vehicle_list)
+                with col2:
+                    fuel_liters = st.number_input("Fuel (Liters)", min_value=1)
+                with col3:
+                    fuel_cost = st.number_input("Fuel Cost (₹)", min_value=0)
+
+                submitted = st.form_submit_button("Add Fuel Record", use_container_width=True)
+
+                if submitted:
+                    new_fuel = pd.DataFrame({
+                        "Vehicle Number": [vehicle],
+                        "Fuel (Liters)": [fuel_liters],
+                        "Cost": [fuel_cost]
+                    })
+                    st.session_state.fuel = pd.concat(
+                        [st.session_state.fuel, new_fuel], ignore_index=True
+                    )
+                    st.success("Fuel record added")
+        else:
+            empty_state("Add a vehicle first before logging fuel.")
+
+    st.write("")
+
+    with st.container(border=True):
+        total_fuel_cost = st.session_state.fuel["Cost"].sum() if not st.session_state.fuel.empty else 0
+        section_title("⛽", "Fuel Records", f"{len(st.session_state.fuel)} records • ₹{total_fuel_cost:,.0f} total")
+        if st.session_state.fuel.empty:
+            empty_state("No fuel records yet.")
+        else:
+            st.dataframe(st.session_state.fuel, use_container_width=True, hide_index=True)
