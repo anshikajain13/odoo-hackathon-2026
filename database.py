@@ -86,6 +86,67 @@ def init_db():
     conn.commit()
     conn.close()
 
+def validate_reg_number(reg_number):
+    """Input Validation: Validates vehicle registration plate format."""
+    if not reg_number or not isinstance(reg_number, str):
+        return False
+    return bool(re.match(r'^[A-Z0-9-]{4,15}$', reg_number.strip().upper()))
+
+def add_vehicle(reg_number, model, v_type, max_capacity, odometer, acquisition_cost, status='Available'):
+    """Adds a new vehicle with strict server-side input validation and parameterized queries."""
+    if not validate_reg_number(reg_number) or not model or not v_type:
+        print("Validation Error: Invalid input parameters.")
+        return False
+        
+    try:
+        max_capacity = float(max_capacity)
+        odometer = float(odometer)
+        acquisition_cost = float(acquisition_cost)
+        if max_capacity <= 0 or odometer < 0 or acquisition_cost < 0:
+            return False
+    except ValueError:
+        return False
+
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO vehicles (reg_number, model, type, max_capacity, odometer, acquisition_cost, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (reg_number.strip().upper(), model.strip(), v_type.strip(), max_capacity, odometer, acquisition_cost, status))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+def add_driver(name, license_number, license_expiry, safety_score=100.0, status='Available'):
+    """Registers a new driver with parameter validation."""
+    if not name or not license_number or not license_expiry:
+        return False
+        
+    try:
+        safety_score = float(safety_score)
+        if not (0 <= safety_score <= 100):
+            return False
+    except ValueError:
+        return False
+
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO drivers (name, license_number, license_expiry, safety_score, status)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (name.strip(), license_number.strip().upper(), license_expiry.strip(), safety_score, status))
+        conn.commit()
+        return True
+    except Exception:
+        return False
+    finally:
+        conn.close()
+
 if __name__ == '__main__':
     init_db()
-    print("Database schema initialized successfully.") 
+    print("Database system initialized successfully.")
