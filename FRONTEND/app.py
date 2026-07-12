@@ -1,6 +1,25 @@
 import streamlit as st
 import pandas as pd
+import requests
 from datetime import datetime
+
+API_BASE_URL = "http://127.0.0.1:8000"
+
+
+def get_dashboard_data():
+    try:
+        response = requests.get(
+            f"{API_BASE_URL}/analytics/dashboard",
+            timeout=5
+        )
+
+        if response.status_code == 200:
+            return response.json()
+
+    except requests.exceptions.RequestException:
+        return None
+
+    return None
 
 # =============================================================================
 # PAGE CONFIG
@@ -321,13 +340,9 @@ if "fuel" not in st.session_state:
     )
 
 if "trips" not in st.session_state:
-    st.session_state.trips = pd.DataFrame({
-        "Source": ["Bhopal"],
-        "Destination": ["Indore"],
-        "Vehicle": ["MP04AB1234"],
-        "Driver": ["Rahul Sharma"],
-        "Status": ["Running"]
-    })
+    st.session_state.trips = pd.DataFrame(
+        columns=["Source", "Destination", "Vehicle", "Driver", "Status"]
+    )
 
 
 # =============================================================================
@@ -442,25 +457,51 @@ with st.sidebar:
 
 if page == "Dashboard":
 
+    dashboard_data = get_dashboard_data()
+
+    if dashboard_data:
+        total_vehicles = dashboard_data["fleet"]["total"]
+        available_vehicles = dashboard_data["fleet"]["available"]
+        vehicles_on_trip = dashboard_data["fleet"]["on_trip"]
+        vehicles_in_maintenance = dashboard_data["fleet"]["maintenance"]
+
+        total_drivers = dashboard_data["drivers"]["total"]
+        available_drivers = dashboard_data["drivers"]["available"]
+
+        total_trips = dashboard_data["trips"]["total"]
+        active_trips = dashboard_data["trips"]["dispatched"]
+        completed_trips = dashboard_data["trips"]["completed"]
+
+    else:
+        total_vehicles = 0
+        available_vehicles = 0
+        vehicles_on_trip = 0
+        vehicles_in_maintenance = 0
+        total_drivers = 0
+        available_drivers = 0
+        total_trips = 0
+        active_trips = 0
+        completed_trips = 0
+
     page_header(
         "Transport Operations Dashboard",
         "Live overview of your fleet, drivers and trips",
         datetime.now().strftime("%d %b %Y")
     )
 
-    active_trips = len(st.session_state.trips[st.session_state.trips["Status"] == "Running"])
+
     fuel_cost = st.session_state.fuel["Cost"].sum() if not st.session_state.fuel.empty else 0
     maintenance_cost = st.session_state.maintenance["Cost"].sum() if not st.session_state.maintenance.empty else 0
 
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
-        metric_card("🚌", "Total Vehicles", len(st.session_state.vehicles), accent="#F5A623")
+        metric_card("🚌", "Total Vehicles", total_vehicles, accent="#F5A623")
     with c2:
-        metric_card("👤", "Total Drivers", len(st.session_state.drivers), accent="#2DD4BF")
+        metric_card("👤", "Total Drivers", total_drivers, accent="#2DD4BF")
     with c3:
         metric_card("🗺️", "Active Trips", active_trips, accent="#22C55E")
     with c4:
-        metric_card("🔧", "Maintenance Records", len(st.session_state.maintenance), accent="#EF4444")
+        metric_card("🔧", "Maintenance Records", dashboard_data["maintenance"]["total"] if dashboard_data else 0, accent="#EF4444")
     with c5:
         metric_card("⛽", "Fuel Expense", f"₹{fuel_cost:,.0f}", accent="#F5A623")
 
@@ -478,7 +519,32 @@ if page == "Dashboard":
                     use_container_width=True,
                     hide_index=True
                 )
+            try:
+                trips_response = requests.get(
+                    f"{API_BASE_URL}/trips/",
+                    timeout=5
+                )
 
+                if trips_response.status_code == 200:
+                    trips_data = trips_response.json()
+                    trips = trips_data
+
+                    if not trips:
+                        empty_state("No trips recorded yet.")
+                    else:
+                        trips_df = pd.DataFrame(trips)
+
+                        st.dataframe(
+                            trips_df,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                else:
+                    empty_state("Unable to load trips.")
+
+            except requests.exceptions.RequestException:
+                empty_state("Backend connection failed.")
+              
         with st.container(border=True):
             section_title("💰", "Cost Analytics", "Fuel vs. maintenance spend")
             cc1, cc2 = st.columns(2)
@@ -539,46 +605,101 @@ elif page == "Vehicles":
         if submitted:
             if vehicle_no.strip() == "":
                 st.warning("Enter vehicle number")
-            elif vehicle_no in st.session_state.vehicles["Vehicle Number"].values:
-                st.error("Vehicle already exists")
             else:
-                new_vehicle = pd.DataFrame({
-                    "Vehicle Number": [vehicle_no],
-                    "Type": [vehicle_type],
-                    "Status": [vehicle_status]
-                })
-                st.session_state.vehicles = pd.concat(
-                    [st.session_state.vehicles, new_vehicle], ignore_index=True
-                )
-                st.success("Vehicle added successfully")
+                vehicle_data = {
+                    "vehicle_name": vehicle_no,
+                    "registration_number": vehicle_no,
+                    "vehicle_type": vehicle_type,
+                    "max_load_capacity": 500,
+                    "odometer": 0,
+                    "acquisition_cost": 0,
+                    "status": "Available"
+                }
+
+                try:
+                    response = requests.post(
+                        f"{API_BASE_URL}/vehicles/",
+                        json=vehicle_data,
+                        timeout=5
+                    )
+
+                    if response.status_code == 200:
+                        st.success("Vehicle added successfully")
+                        st.rerun()
+                    else:
+                        st.error(response.json().get("detail", "Failed to add vehicle"))
+
+                except requests.exceptions.RequestException:
+                    st.error("Backend connection failed")
 
     st.write("")
 
     with st.container(border=True):
-        section_title("🚌", "Vehicle Records", f"{len(st.session_state.vehicles)} vehicles on record")
-
-        fcol1, fcol2 = st.columns([2, 1])
-        with fcol1:
-            search_term = st.text_input("Search by vehicle number", placeholder="Type to search...")
-        with fcol2:
-            status_filter = st.selectbox("Filter by status", ["All", "Active", "Maintenance", "Inactive"])
-
-        filtered = st.session_state.vehicles.copy()
-        if search_term:
-            filtered = filtered[
-                filtered["Vehicle Number"].str.contains(search_term, case=False, na=False)
-            ]
-        if status_filter != "All":
-            filtered = filtered[filtered["Status"] == status_filter]
-
-        if filtered.empty:
-            empty_state("No vehicles match your search/filter.")
-        else:
-            st.dataframe(
-                decorate_status(filtered, "Status"),
-                use_container_width=True,
-                hide_index=True
+        try:
+            response = requests.get(
+                f"{API_BASE_URL}/vehicles/",
+                timeout=5
             )
+
+            if response.status_code == 200:
+                vehicles_data = response.json()
+                vehicles = vehicles_data.get("vehicles", [])
+
+                vehicles_df = pd.DataFrame(vehicles)
+
+                section_title(
+                    "🚌",
+                    "Vehicle Records",
+                    f"{len(vehicles_df)} vehicles on record"
+                )
+
+                fcol1, fcol2 = st.columns([2, 1])
+
+                with fcol1:
+                    search_term = st.text_input(
+                        "Search by vehicle number",
+                        placeholder="Type to search..."
+                    )
+
+                with fcol2:
+                    status_filter = st.selectbox(
+                        "Filter by status",
+                        ["All", "Available", "On Trip", "Maintenance"]
+                    )
+
+                if not vehicles_df.empty:
+                    filtered = vehicles_df.copy()
+
+                    if search_term:
+                        filtered = filtered[
+                            filtered["registration_number"].str.contains(
+                                search_term,
+                                case=False,
+                                na=False
+                            )
+                        ]
+
+                    if status_filter != "All":
+                        filtered = filtered[
+                            filtered["status"] == status_filter
+                        ]
+
+                    if filtered.empty:
+                        empty_state("No vehicles match your search/filter.")
+                    else:
+                        st.dataframe(
+                            filtered,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                else:
+                    empty_state("No vehicles recorded yet.")
+
+            else:
+                st.error("Failed to load vehicles")
+
+        except requests.exceptions.RequestException:
+            st.error("Backend connection failed")
 
 
 # =============================================================================
@@ -605,25 +726,75 @@ elif page == "Drivers":
         if submitted:
             if driver_name.strip() == "":
                 st.warning("Enter driver name")
+            elif license_no.strip() == "":
+                st.warning("Enter license number")
+            elif phone.strip() == "":
+                st.warning("Enter phone number")
             else:
-                new_driver = pd.DataFrame({
-                    "Name": [driver_name],
-                    "License": [license_no],
-                    "Phone": [phone]
-                })
-                st.session_state.drivers = pd.concat(
-                    [st.session_state.drivers, new_driver], ignore_index=True
-                )
-                st.success("Driver added successfully")
+                driver_data = {
+                    "name": driver_name,
+                    "license_number": license_no,
+                    "license_category": "LMV",
+                    "license_expiry_date": "2028-12-31",
+                    "contact_number": phone,
+                    "safety_score": 100,
+                    "status": "Available"
+                }
 
+                try:
+                    response = requests.post(
+                        f"{API_BASE_URL}/drivers/",
+                        json=driver_data,
+                        timeout=5
+                    )
+
+                    if response.status_code == 200:
+                        st.success("Driver added successfully")
+                        st.rerun()
+                    else:
+                        st.error(
+                            response.json().get(
+                                "detail",
+                                "Failed to add driver"
+                            )
+                        )
+
+                except requests.exceptions.RequestException:
+                    st.error("Backend connection failed")
     st.write("")
 
-    with st.container(border=True):
-        section_title("👤", "Driver Records", f"{len(st.session_state.drivers)} drivers on record")
-        if st.session_state.drivers.empty:
-            empty_state("No drivers added yet.")
+    try:
+        response = requests.get(
+            f"{API_BASE_URL}/drivers/",
+            timeout=5
+        )
+
+        if response.status_code == 200:
+            drivers_data = response.json()
+            drivers = drivers_data.get("drivers", [])
+
+            drivers_df = pd.DataFrame(drivers)
+
+            with st.container(border=True):
+                section_title(
+                    "👤",
+                    "Driver Records",
+                    f"{len(drivers)} drivers on record"
+                )
+
+                if drivers_df.empty:
+                    empty_state("No drivers added yet.")
+                else:
+                    st.dataframe(
+                        drivers_df,
+                        use_container_width=True,
+                        hide_index=True
+                    )
         else:
-            st.dataframe(st.session_state.drivers, use_container_width=True, hide_index=True)
+            st.error("Failed to load drivers")
+
+    except requests.exceptions.RequestException:
+        st.error("Backend connection failed")
 
 
 # =============================================================================
@@ -632,59 +803,237 @@ elif page == "Drivers":
 
 elif page == "Trips":
 
-    page_header("Trip Management", "Plan and track trips across your fleet")
+    page_header(
+        "Trip Management",
+        "Plan and track trips across your fleet"
+    )
 
-    vehicle_list = st.session_state.vehicles["Vehicle Number"].tolist()
-    driver_list = st.session_state.drivers["Name"].tolist()
+    try:
+        vehicles_response = requests.get(
+            f"{API_BASE_URL}/vehicles/",
+            timeout=5
+        )
+
+        drivers_response = requests.get(
+            f"{API_BASE_URL}/drivers/",
+            timeout=5
+        )
+
+        if (
+            vehicles_response.status_code == 200
+            and drivers_response.status_code == 200
+        ):
+            vehicles_data = vehicles_response.json()
+            drivers_data = drivers_response.json()
+
+            vehicles = vehicles_data.get("vehicles", [])
+            drivers = drivers_data.get("drivers", [])
+
+            available_vehicles = [
+                vehicle
+                for vehicle in vehicles
+                if vehicle["status"] == "Available"
+            ]
+
+            available_drivers = [
+                driver
+                for driver in drivers
+                if driver["status"] == "Available"
+            ]
+
+        else:
+            available_vehicles = []
+            available_drivers = []
+
+    except requests.exceptions.RequestException:
+        available_vehicles = []
+        available_drivers = []
+        st.error("Backend connection failed")
+
+
+    vehicle_map = {
+        f'{vehicle["vehicle_name"]} - {vehicle["registration_number"]}':
+        vehicle["id"]
+        for vehicle in available_vehicles
+    }
+
+    driver_map = {
+        driver["name"]: driver["id"]
+        for driver in available_drivers
+    }
+
 
     with st.container(border=True):
-        section_title("➕", "Create Trip", "Assign a vehicle and driver to a new trip")
 
-        if vehicle_list and driver_list:
-            with st.form("create_trip_form", clear_on_submit=True):
+        section_title(
+            "➕",
+            "Create Trip",
+            "Assign a vehicle and driver to a new trip"
+        )
+
+        if vehicle_map and driver_map:
+
+            with st.form(
+                "create_trip_form",
+                clear_on_submit=True
+            ):
+
                 col1, col2 = st.columns(2)
+
                 with col1:
-                    source = st.text_input("Source", placeholder="e.g. Bhopal")
+                    source = st.text_input(
+                        "Source",
+                        placeholder="e.g. Bhopal"
+                    )
+
                 with col2:
-                    destination = st.text_input("Destination", placeholder="e.g. Indore")
+                    destination = st.text_input(
+                        "Destination",
+                        placeholder="e.g. Indore"
+                    )
+
 
                 col3, col4 = st.columns(2)
-                with col3:
-                    vehicle = st.selectbox("Assign Vehicle", vehicle_list)
-                with col4:
-                    driver = st.selectbox("Assign Driver", driver_list)
 
-                submitted = st.form_submit_button("Create Trip", use_container_width=True)
+                with col3:
+                    vehicle = st.selectbox(
+                        "Assign Vehicle",
+                        list(vehicle_map.keys())
+                    )
+
+                with col4:
+                    driver = st.selectbox(
+                        "Assign Driver",
+                        list(driver_map.keys())
+                    )
+
+
+                col5, col6 = st.columns(2)
+
+                with col5:
+                    cargo_weight = st.number_input(
+                        "Cargo Weight (kg)",
+                        min_value=1.0,
+                        value=100.0
+                    )
+
+                with col6:
+                    trip_date = st.date_input(
+                        "Trip Date"
+                    )
+
+
+                submitted = st.form_submit_button(
+                    "Create Trip",
+                    use_container_width=True
+                )
+
 
                 if submitted:
-                    if source.strip() and destination.strip():
-                        new_trip = pd.DataFrame({
-                            "Source": [source],
-                            "Destination": [destination],
-                            "Vehicle": [vehicle],
-                            "Driver": [driver],
-                            "Status": ["Running"]
-                        })
-                        st.session_state.trips = pd.concat(
-                            [st.session_state.trips, new_trip], ignore_index=True
+
+                    if not source.strip() or not destination.strip():
+
+                        st.warning(
+                            "Enter source and destination"
                         )
-                        st.success("Trip created successfully")
+
                     else:
-                        st.warning("Enter source and destination")
+
+                        trip_data = {
+                            "vehicle_id": vehicle_map[vehicle],
+                            "driver_id": driver_map[driver],
+                            "origin": source,
+                            "destination": destination,
+                            "cargo_weight": cargo_weight,
+                            "trip_date": str(trip_date)
+                        }
+
+                        try:
+
+                            response = requests.post(
+                                f"{API_BASE_URL}/trips/",
+                                json=trip_data,
+                                timeout=5
+                            )
+
+                            if response.status_code == 200:
+
+                                st.success(
+                                    "Trip created successfully"
+                                )
+
+                                st.rerun()
+
+                            else:
+
+                                st.error(
+                                    response.json().get(
+                                        "detail",
+                                        "Failed to create trip"
+                                    )
+                                )
+
+                        except requests.exceptions.RequestException:
+
+                            st.error(
+                                "Backend connection failed"
+                            )
+
         else:
-            empty_state("Add at least one vehicle and one driver before creating a trip.")
+
+            empty_state(
+                "Add an available vehicle and driver before creating a trip."
+            )
+
 
     st.write("")
 
+
     with st.container(border=True):
-        section_title("🗺️", "Trip History", f"{len(st.session_state.trips)} trips recorded")
-        if st.session_state.trips.empty:
-            empty_state("No trips recorded yet.")
-        else:
-            st.dataframe(
-                decorate_status(st.session_state.trips, "Status"),
-                use_container_width=True,
-                hide_index=True
+
+        try:
+
+            trips_response = requests.get(
+                f"{API_BASE_URL}/trips/",
+                timeout=5
+            )
+
+            if trips_response.status_code == 200:
+
+                trips = trips_response.json()
+
+                section_title(
+                    "🗺️",
+                    "Trip History",
+                    f"{len(trips)} trips recorded"
+                )
+
+                if not trips:
+
+                    empty_state(
+                        "No trips recorded yet."
+                    )
+
+                else:
+
+                    trips_df = pd.DataFrame(trips)
+
+                    st.dataframe(
+                        trips_df,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+            else:
+
+                empty_state(
+                    "Unable to load trips."
+                )
+
+        except requests.exceptions.RequestException:
+
+            empty_state(
+                "Backend connection failed."
             )
 
 
