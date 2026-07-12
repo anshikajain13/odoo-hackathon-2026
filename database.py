@@ -4,13 +4,13 @@ import re
 DB_NAME = "transitops.db"
 
 def get_connection():
-    """Establishes database connection with foreign key enforcement."""
-    conn = sqlite3.connect(DB_NAME)
+    """Establishes database connection with strict timeouts to prevent connection flooding."""
+    conn = sqlite3.connect(DB_NAME, timeout=10.0)
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 
 def init_db():
-    """Initializes core relational tables for the transit management system."""
+    """Initializes core relational tables securely for the transit management system."""
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -95,8 +95,11 @@ def validate_reg_number(reg_number):
 
 def add_vehicle(reg_number, model, v_type, max_capacity, odometer, acquisition_cost, status='Available'):
     """Adds a new vehicle with strict server-side input validation and parameterized queries."""
-    if not validate_reg_number(reg_number) or not model or not v_type:
-        print("Validation Error: Invalid input parameters.")
+    if not validate_reg_number(reg_number):
+        print("[VALIDATION ERROR] Invalid vehicle registration format.")
+        return False
+    if not model or not v_type:
+        print("[VALIDATION ERROR] Model and Type cannot be blank.")
         return False
         
     try:
@@ -104,8 +107,10 @@ def add_vehicle(reg_number, model, v_type, max_capacity, odometer, acquisition_c
         odometer = float(odometer)
         acquisition_cost = float(acquisition_cost)
         if max_capacity <= 0 or odometer < 0 or acquisition_cost < 0:
+            print("[VALIDATION ERROR] Numeric metrics must be logical non-negative values.")
             return False
     except ValueError:
+        print("[VALIDATION ERROR] Data conversion failed for numeric fields.")
         return False
 
     try:
@@ -118,6 +123,7 @@ def add_vehicle(reg_number, model, v_type, max_capacity, odometer, acquisition_c
         conn.commit()
         return True
     except sqlite3.IntegrityError:
+        print("[DATABASE ERROR] Duplicate registration number entry blocked.")
         return False
     finally:
         conn.close()
@@ -125,13 +131,16 @@ def add_vehicle(reg_number, model, v_type, max_capacity, odometer, acquisition_c
 def add_driver(name, license_number, license_expiry, safety_score=100.0, status='Available'):
     """Registers a new driver with parameter validation."""
     if not name or not license_number or not license_expiry:
+        print("[VALIDATION ERROR] Driver credentials cannot be blank.")
         return False
         
     try:
         safety_score = float(safety_score)
         if not (0 <= safety_score <= 100):
+            print("[VALIDATION ERROR] Safety score bounds must be 0-100.")
             return False
     except ValueError:
+        print("[VALIDATION ERROR] Invalid datatypes provided for safety score.")
         return False
 
     try:
@@ -143,7 +152,82 @@ def add_driver(name, license_number, license_expiry, safety_score=100.0, status=
         ''', (name.strip(), license_number.strip().upper(), license_expiry.strip(), safety_score, status))
         conn.commit()
         return True
-    except Exception:
+    except Exception as e:
+        print(f"[DATABASE ERROR] {e}")
+        return False
+    finally:
+        conn.close()
+
+def add_trip(source, destination, vehicle_id, driver_id, cargo_weight, distance, status='Draft'):
+    """Creates a new trip log with validated relations and strict input checks."""
+    if not source or not destination:
+        print("[VALIDATION ERROR] Source and Destination strings cannot be empty.")
+        return False
+        
+    try:
+        vehicle_id = int(vehicle_id)
+        driver_id = int(driver_id)
+        cargo_weight = float(cargo_weight)
+        distance = float(distance)
+        if cargo_weight <= 0 or distance <= 0:
+            print("[VALIDATION ERROR] Distance and weight logs must be positive values.")
+            return False
+    except ValueError:
+        print("[VALIDATION ERROR] Relational ID parsing exception.")
+        return False
+
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT id FROM vehicles WHERE id = ?", (vehicle_id,))
+        if not cursor.fetchone():
+            print("[INTEGRITY ERROR] Relational check failed: Vehicle ID does not exist.")
+            return False
+            
+        cursor.execute("SELECT id FROM drivers WHERE id = ?", (driver_id,))
+        if not cursor.fetchone():
+            print("[INTEGRITY ERROR] Relational check failed: Driver ID does not exist.")
+            return False
+
+        cursor.execute('''
+            INSERT INTO trips (source, destination, vehicle_id, driver_id, cargo_weight, distance, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (source.strip(), destination.strip(), vehicle_id, driver_id, cargo_weight, distance, status))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE ERROR] {e}")
+        return False
+    finally:
+        conn.close()
+
+def log_maintenance(vehicle_id, description, cost, entry_date, status='Open'):
+    """Logs vehicle maintenance details securely."""
+    if not description or not entry_date:
+        print("[VALIDATION ERROR] Maintenance fields cannot be null.")
+        return False
+        
+    try:
+        vehicle_id = int(vehicle_id)
+        cost = float(cost)
+        if cost < 0:
+            print("[VALIDATION ERROR] Financial maintenance metrics cannot be negative.")
+            return False
+    except ValueError:
+        return False
+
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO maintenance_logs (vehicle_id, description, cost, entry_date, status)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (vehicle_id, description.strip(), cost, entry_date.strip(), status))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[DATABASE ERROR] {e}")
         return False
     finally:
         conn.close()
