@@ -3,7 +3,7 @@ from fastapi import FastAPI
 import models
 
 from database import engine
-from routers import vehicles, drivers, trips, maintenance
+from routers import vehicles, drivers, trips, maintenance, analytics
 
 
 models.Base.metadata.create_all(bind=engine)
@@ -20,6 +20,7 @@ app.include_router(vehicles.router)
 app.include_router(drivers.router)
 app.include_router(trips.router)
 app.include_router(maintenance.router)
+app.include_router(analytics.router)
 
 @app.get("/")
 def home():
