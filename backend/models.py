@@ -138,3 +138,37 @@ class Trip(Base):
         String,
         default="Draft"
     )
+class Maintenance(Base):
+
+    __tablename__ = "maintenance"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    vehicle_id = Column(
+        Integer,
+        nullable=False
+    )
+
+    issue = Column(
+        String,
+        nullable=False
+    )
+
+    service_date = Column(
+        Date,
+        nullable=False
+    )
+
+    cost = Column(
+        Float,
+        nullable=False
+    )
+
+    status = Column(
+        String,
+        default="Scheduled"
+    )

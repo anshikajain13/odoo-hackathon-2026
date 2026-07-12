@@ -53,3 +53,15 @@ class TripUpdate(BaseModel):
     cargo_weight: float
     trip_date: date
     status: str
+class MaintenanceCreate(BaseModel):
+    vehicle_id: int
+    issue: str
+    service_date: date
+    cost: float
+
+
+class MaintenanceUpdate(BaseModel):
+    issue: str
+    service_date: date
+    cost: float
+    status: str
