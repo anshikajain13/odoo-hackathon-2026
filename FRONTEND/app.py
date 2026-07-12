@@ -782,9 +782,10 @@ elif page == "Fuel":
     st.write("")
 
     with st.container(border=True):
-        total_fuel_cost = st.session_state.fuel["Cost"].sum() if not st.session_state.fuel.empty else 0
-        section_title("⛽", "Fuel Records", f"{len(st.session_state.fuel)} records • ₹{total_fuel_cost:,.0f} total")
+    
         if st.session_state.fuel.empty:
+            total_fuel_cost = 0
             empty_state("No fuel records yet.")
         else:
-            st.dataframe(st.session_state.fuel, use_container_width=True, hide_index=True)
+            total_fuel_cost = st.session_state.fuel["Cost"].sum()
+            st.dataframe(st.session_state.fuel, width='stretch', hide_index=True)
